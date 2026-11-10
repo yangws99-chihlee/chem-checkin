@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>化學 B44 簽到系統 - 楊老師</title>
-<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+<!-- QR 改用圖片 API，不依賴 JS 函式庫，避免 CDN 被擋就空白 -->
 <style>
 *{box-sizing:border-box} body{font-family:-apple-system,"Microsoft JhengHei",sans-serif;margin:0;background:#f3f0ff;color:#222}
 header{background:#5b3fd6;color:#fff;padding:16px;text-align:center}
@@ -48,7 +48,7 @@ code{word-break:break-all;background:#f6f6f6;padding:6px 8px;border-radius:6px;d
 <div id="qrArea" class="hidden">
 <div class="center"><div class="big" id="qrTitle">請掃描簽到</div><p id="qrCountdown">QR-Code 每 30 秒自動更新 · 剩餘 30 秒</p><div id="qrcode"></div>
 <p class="muted">Android 相機一掃就開（部署為 https 後）。若相機沒反應，請用 Google Lens 掃，或用下方連結。</p>
-<code id="qrUrlText"></code>
+<code id="qrUrlText"></code><p id="qrDebug" class="muted">如果 QR 還是空白，請檢查網路是否能連 api.qrserver.com，或直接用下方連結。</p>
 <button class="btn btn-outline" onclick="copyLink()">複製學生簽到連結</button>
 <button class="btn btn-outline" onclick="openStudentLink()">無法掃描？點我直接開啟學生簽到頁</button>
 </div></div>
@@ -107,7 +107,13 @@ function renderQR(){
  const url = buildStudentUrl();
  document.getElementById('qrUrlText').textContent = url;
  const el = document.getElementById('qrcode'); el.innerHTML='';
- QRCode.toCanvas(url, {width:320, margin:2, errorCorrectionLevel:'H'}, function(err, canvas){ if(err){ el.textContent='QR 產生失敗，請用連結'; } else el.appendChild(canvas); });
+ const img = document.createElement('img');
+ img.style.width='320px'; img.style.height='320px'; img.style.background='#fff';
+ img.alt='QR-Code';
+ // 使用 qrserver 圖片 API，穩定、不需額外 JS 函式庫
+ img.src = 'https://api.qrserver.com/v1/create-qr-code/?size=340x340&margin=10&ecc=H&data=' + encodeURIComponent(url);
+ img.onerror = function(){ el.innerHTML='<p style="color:#b00">QR 圖片載入失敗，請改用下方「複製學生簽到連結」貼到 Line 群組，學生點連結即可簽到。</p>'; };
+ el.appendChild(img);
 }
 function startSession(){
  const type = document.getElementById('checkType').value;
