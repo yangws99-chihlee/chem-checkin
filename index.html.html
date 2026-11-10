@@ -68,7 +68,7 @@ code{word-break:break-all;background:#f6f6f6;padding:6px 8px;border-radius:6px;d
 <div class="card">
 <h2>學生簽到</h2>
 <p>課程：<b>化學</b> · 教室：<b>B44</b> · 老師：<b>楊老師</b> · 類型：<b id="studentTypeLabel">簽到</b></p>
-<p id="studentSessionInfo" class="muted"></p>
+<p id="studentSessionInfo" class="muted"></p><p class="muted" style="background:#fff7e6;padding:8px;border-radius:8px">⚠️ 防代簽：同一台手機只能幫一個人簽到。已簽過就無法再幫其他同學簽。</p><p id="deviceInfo" class="muted"></p>
 <label>學號（5 開頭的 8 碼，例如 51234567）</label>
 <input id="studentId" placeholder="請輸入 5 開頭的 8 碼學號，例如 51234567" maxlength="8" inputmode="numeric">
 <p id="emailPreview" class="muted"></p>
@@ -141,31 +141,57 @@ document.getElementById('studentId').addEventListener('input', e=>{
  const v=e.target.value.trim();
  document.getElementById('emailPreview').textContent = v ? '學校帳號：'+v+'@mail.chihlee.edu.tw' : '';
 });
+function getDeviceId(){
+ let d = localStorage.getItem('chem_device_id');
+ if(!d){ d='DEV-'+Math.random().toString(36).slice(2,8).toUpperCase(); localStorage.setItem('chem_device_id', d); }
+ return d;
+}
+function getDeviceLabel(){
+ const ua = navigator.userAgent;
+ let brand='手機/電腦';
+ if(/iPhone/i.test(ua)) brand='iPhone';
+ else if(/Android/i.test(ua)) brand='Android 手機';
+ else if(/Windows/i.test(ua)) brand='Windows 電腦';
+ else if(/Mac/i.test(ua)) brand='Mac 電腦';
+ return brand + ' · ' + getDeviceId();
+}
 function doCheckin(){
  const id=document.getElementById('studentId').value.trim();
  const name=document.getElementById('studentName').value.trim();
  const msg=document.getElementById('studentMsg'); msg.innerHTML='';
  if(!validId(id)){ msg.innerHTML='<div class="error">學號格式錯誤：必須是 5 開頭的 8 個數字，例如 51234567</div>'; return; }
  if(!name){ msg.innerHTML='<div class="error">請輸入姓名</div>'; return; }
+ const deviceId = getDeviceId();
+ const deviceLabel = getDeviceLabel();
+ // 輕量防代簽：同一裝置已幫其他學號簽過同類型，就擋下
+ const params0 = new URLSearchParams(window.location.search);
+ const type0 = params0.get('k')||document.getElementById('checkType').value;
+ const conflict = records.find(r=>r.deviceId===deviceId && r.type===type0 && r.id!==id);
+ if(conflict){ msg.innerHTML='<div class="error">此裝置已幫 '+conflict.name+'（'+conflict.id+'）簽到過，無法再幫其他同學簽到。<br>請用你自己的手機簽到。</div>'; return; }
  const params=new URLSearchParams(window.location.search);
  const type=params.get('k')||document.getElementById('checkType').value;
  const email=id+'@mail.chihlee.edu.tw';
  // 防重複
  if(records.find(r=>r.id===id && r.type===type)){ msg.innerHTML='<div class="error">你已經簽到過了，無需重複簽到</div>'; return; }
- const rec={id:id,name:name,email:email,type:type,time:new Date().toLocaleString(),course:'化學',room:'B44',teacher:'楊老師'};
+ const rec={id:id,name:name,email:email,type:type,time:new Date().toLocaleString(),course:'化學',room:'B44',teacher:'楊老師',deviceId:deviceId,deviceLabel:deviceLabel};
  records.push(rec); localStorage.setItem('chem_records', JSON.stringify(records));
  const s=document.getElementById('studentSuccess'); s.classList.remove('hidden');
  s.innerHTML='<h3>✅ '+(type==='checkin'?'簽到成功':'簽退成功')+'</h3><p>'+name+'（'+id+'）<br>'+email+'<br>化學 / B44 / 楊老師<br>時間：'+rec.time+'</p><p class="muted">請將此畫面給老師看，或截圖留存。</p>';
- renderList(); alert('簽到成功！');
+ const di=document.getElementById('deviceInfo'); if(di) di.textContent='你的裝置：'+getDeviceLabel(); renderList(); alert('簽到成功！');
 }
 function renderList(){
  const area=document.getElementById('listArea');
  document.getElementById('countLabel').textContent='（'+records.length+' 人）';
  if(!records.length){ area.innerHTML='<p class="muted">尚未有簽到資料</p>'; return; }
- let h='<table><tr><th>姓名</th><th>學號</th><th>Email</th><th>類型</th><th>時間</th></tr>';
- records.forEach(r=>{ h+='<tr><td>'+r.name+'</td><td>'+r.id+'</td><td>'+r.email+'</td><td>'+(r.type==='checkin'?'簽到':'簽退')+'</td><td>'+r.time+'</td></tr>'; });
+ // 檢查是否有同一裝置簽多人
+ const deviceCounts={}; records.forEach(r=>{ if(r.deviceId) deviceCounts[r.deviceId]=(deviceCounts[r.deviceId]||0)+1; });
+ const dupDevices = Object.keys(deviceCounts).filter(k=>deviceCounts[k]>1);
+ let warn='';
+ if(dupDevices.length){ warn='<p style="color:#b00;background:#ffecec;padding:8px;border-radius:8px">⚠️ 發現疑似代簽：有 '+dupDevices.length+' 台裝置簽了多人，請現場抽查。</p>'; }
+ let h=warn+'<table><tr><th>姓名</th><th>學號</th><th>類型</th><th>時間</th><th>裝置</th></tr>';
+ records.forEach(r=>{ const dup = r.deviceId && deviceCounts[r.deviceId]>1 ? ' <span style="color:#fff;background:#d00;padding:2px 6px;border-radius:10px;font-size:11px">疑似代簽</span>' : ''; h+='<tr><td>'+r.name+'</td><td>'+r.id+'</td><td>'+(r.type==='checkin'?'簽到':'簽退')+'</td><td>'+r.time+'</td><td>'+(r.deviceLabel||r.deviceId||'-')+dup+'</td></tr>'; });
  h+='</table>'; area.innerHTML=h;
- const csv = '課程,教室,老師,姓名,學號,Email,類型,時間\n' + records.map(r=>['化學','B44','楊老師',r.name,r.id,r.email,r.type==='checkin'?'簽到':'簽退',r.time].join(',')).join('\n');
+ const csv = '課程,教室,老師,姓名,學號,Email,類型,時間,裝置\n' + records.map(r=>['化學','B44','楊老師',r.name,r.id,r.email,r.type==='checkin'?'簽到':'簽退',r.time,r.deviceLabel||r.deviceId||''].join(',')).join('\n');
  document.getElementById('csvPreview').textContent=csv;
 }
 function exportCSV(){
@@ -191,7 +217,7 @@ function emailCSV(){
  const p=new URLSearchParams(window.location.search);
  if(p.get('mode')==='student'){ showTab('student'); const k=p.get('k'); if(k) document.getElementById('studentTypeLabel').textContent = k==='checkout'?'簽退':'簽到';
   document.getElementById('studentSessionInfo').textContent='你正在掃碼簽到，場次：'+(p.get('s')||'')+' · Token：'+(p.get('t')||''); }
- renderList();
+ const di=document.getElementById('deviceInfo'); if(di) di.textContent='你的裝置：'+getDeviceLabel(); renderList();
 })();
 </script>
 </body>
