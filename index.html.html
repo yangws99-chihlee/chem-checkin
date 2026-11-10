@@ -43,7 +43,7 @@ code{word-break:break-all;background:#f6f6f6;padding:6px 8px;border-radius:6px;d
 <label>簽到類型</label>
 <select id="checkType"><option value="checkin">簽到（上課）</option><option value="checkout">簽退（下課）</option></select>
 <p class="muted">簽到時間：由老師啟動與關閉，不自動結束。</p>
-<button class="btn btn-primary" id="startBtn" onclick="startSession()">開始簽到</button>
+<button class="btn btn-gray" onclick="startNewClass()">🔄 重新開始新一堂課（清除舊資料）</button><p class="muted">上課前先按這個，會清掉測試的 2 筆資料，再按「開始簽到」就是全新的名單。</p><button class="btn btn-primary" id="startBtn" onclick="startSession()">開始簽到</button>
 <button class="btn btn-gray hidden" id="stopBtn" onclick="stopSession()">結束簽到</button>
 <div id="qrArea" class="hidden">
 <div class="center"><div class="big" id="qrTitle">請掃描簽到</div><p id="qrCountdown">QR-Code 每 30 秒自動更新 · 剩餘 30 秒</p><div id="qrcode"></div>
@@ -189,6 +189,15 @@ function doCheckin(){
  const s=document.getElementById('studentSuccess'); s.classList.remove('hidden');
  s.innerHTML='<h3>✅ '+(type==='checkin'?'簽到成功':'簽退成功')+'</h3><p>'+name+'（'+id+'）<br>'+email+'<br>化學 / B44 / 楊老師<br>時間：'+rec.time+'</p><p class="muted">請將此畫面給老師看，或截圖留存。</p>';
  const di=document.getElementById('deviceInfo'); if(di) di.textContent='你的裝置：'+getDeviceLabel(); renderList(); alert('簽到成功！已寫入 Google 試算表，老師端按同步即可看到。');
+}
+
+
+function startNewClass(){
+  if(!confirm('確定要重新開始一堂新課嗎？會清除試算表裡舊的簽到資料，老師端名單也會清空。請先確認已把舊資料備份到其他分頁或已下載 CSV。')) return;
+  records=[]; localStorage.setItem('chem_records', JSON.stringify(records)); renderList();
+  if(USE_GAS){
+    fetch(GAS_URL+'?action=clear').then(()=>alert('已清除試算表舊資料，可以開始新的一堂課了。請按「開始簽到」')).catch(()=>alert('已清空本機名單，請再到試算表手動刪除舊資料'));
+  } else alert('已清空本機名單');
 }
 
 function syncFromSheet(){
