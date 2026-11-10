@@ -54,7 +54,7 @@ code{word-break:break-all;background:#f6f6f6;padding:6px 8px;border-radius:6px;d
 </div></div>
 </div>
 <div class="card"><h2>即時名單 <span id="countLabel"></span></h2><div id="listArea"><p class="muted">尚未有簽到資料。學生簽到後會顯示在這裡（同一台裝置測試時即時顯示）。</p></div>
-<button class="btn btn-gray" onclick="exportCSV()">下載 CSV</button>
+<button class="btn btn-primary" onclick="syncFromSheet()">🔄 從 Google 試算表同步名單</button><p class="muted">老師請每 30 秒按一次同步，或結束簽到後按一次，名單就會從試算表讀回來。</p><button class="btn btn-gray" onclick="exportCSV()">下載 CSV</button>
 <button class="btn btn-gray" onclick="copyCSV()">複製 CSV 內容</button>
 <button class="btn btn-green" onclick="emailCSV()">寄到楊老師信箱 yangws99@gm.chihlee.edu.tw</button>
 <p class="muted">部署說明：把這個檔案上傳到學校主機 / GitHub Pages / Vercel，網址會變成 https://你的網域/ ，QR-Code 就會用那個 https 網址產生，Android 相機一掃就開。</p>
@@ -82,6 +82,13 @@ code{word-break:break-all;background:#f6f6f6;padding:6px 8px;border-radius:6px;d
 </div>
 </div>
 <script>
+
+// ===== Google 試算表後端設定 =====
+// 步驟：把你的 Apps Script 佈署網址貼在下面，取代 PASTE_YOUR_GAS_URL_HERE
+// 例如：https://script.google.com/macros/s/XXXX/exec
+const GAS_URL = "https://script.google.com/macros/s/AKfycbzt0r8kGsAA6vyHHe15XQy2QlBfivhPBFZ7dnlNRQT_OiPFa6qCf2set3qblp53R5mdKQ/exec";
+const USE_GAS = GAS_URL && GAS_URL.startsWith("https://");
+
 let session=null, timer=null, token='', countdown=30;
 let records = JSON.parse(localStorage.getItem('chem_records')||'[]');
 function showTab(t){
@@ -174,11 +181,24 @@ function doCheckin(){
  // 防重複
  if(records.find(r=>r.id===id && r.type===type)){ msg.innerHTML='<div class="error">你已經簽到過了，無需重複簽到</div>'; return; }
  const rec={id:id,name:name,email:email,type:type,time:new Date().toLocaleString(),course:'化學',room:'B44',teacher:'楊老師',deviceId:deviceId,deviceLabel:deviceLabel};
+ // 寫到 Google 試算表（共用資料庫）
+ if(USE_GAS){
+   fetch(GAS_URL, {method:'POST', mode:'no-cors', headers:{'Content-Type':'application/json'}, body: JSON.stringify(rec)}).catch(()=>{});
+ }
  records.push(rec); localStorage.setItem('chem_records', JSON.stringify(records));
  const s=document.getElementById('studentSuccess'); s.classList.remove('hidden');
  s.innerHTML='<h3>✅ '+(type==='checkin'?'簽到成功':'簽退成功')+'</h3><p>'+name+'（'+id+'）<br>'+email+'<br>化學 / B44 / 楊老師<br>時間：'+rec.time+'</p><p class="muted">請將此畫面給老師看，或截圖留存。</p>';
- const di=document.getElementById('deviceInfo'); if(di) di.textContent='你的裝置：'+getDeviceLabel(); renderList(); alert('簽到成功！');
+ const di=document.getElementById('deviceInfo'); if(di) di.textContent='你的裝置：'+getDeviceLabel(); renderList(); alert('簽到成功！已寫入 Google 試算表，老師端按同步即可看到。');
 }
+
+function syncFromSheet(){
+  if(!USE_GAS){ alert('尚未設定 Google 試算表網址，請先照教學設定 GAS_URL'); return; }
+  fetch(GAS_URL+'?action=list').then(r=>r.json()).then(data=>{
+    if(Array.isArray(data) && data.length){ records=data; localStorage.setItem('chem_records', JSON.stringify(records)); renderList(); alert('已從試算表同步 '+data.length+' 筆'); }
+    else alert('試算表目前尚無資料');
+  }).catch(()=>alert('同步失敗，請檢查 GAS 網址與佈署權限是否為「所有人」'));
+}
+
 function renderList(){
  const area=document.getElementById('listArea');
  document.getElementById('countLabel').textContent='（'+records.length+' 人）';
