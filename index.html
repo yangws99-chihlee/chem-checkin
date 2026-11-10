@@ -87,11 +87,19 @@ code{word-break:break-all;background:#f6f6f6;padding:6px 8px;border-radius:6px;d
 // 步驟：把你的 Apps Script 佈署網址貼在下面，取代 PASTE_YOUR_GAS_URL_HERE
 // 例如：https://script.google.com/macros/s/XXXX/exec
 const GAS_URL = "https://script.google.com/macros/s/AKfycbzt0r8kGsAA6vyHHe15XQy2QlBfivhPBFZ7dnlNRQT_OiPFa6qCf2set3qblp53R5mdKQ/exec";
+const TEACHER_PIN = "8888"; // 老師端密碼，預設 8888，請老師自行改成自己記得住的 4 碼
 const USE_GAS = GAS_URL && GAS_URL.startsWith("https://");
 
 let session=null, timer=null, token='', countdown=30;
 let records = JSON.parse(localStorage.getItem('chem_records')||'[]');
+let isStudentMode = false;
 function showTab(t){
+ if(t==='teacher' && isStudentMode){ alert('學生掃碼模式無法進入老師端'); return; }
+ if(t==='teacher'){
+   const pin = prompt('請輸入老師端密碼（預設 8888）：');
+   if(pin===null) return;
+   if(pin!==TEACHER_PIN){ alert('密碼錯誤，無法進入老師端'); return; }
+ }
  document.getElementById('teacherView').classList.toggle('hidden', t!=='teacher');
  document.getElementById('studentView').classList.toggle('hidden', t!=='student');
  document.getElementById('tabTeacher').classList.toggle('active', t==='teacher');
@@ -247,7 +255,7 @@ function emailCSV(){
 // 解析掃碼參數
 (function(){
  const p=new URLSearchParams(window.location.search);
- if(p.get('mode')==='student'){ showTab('student'); const k=p.get('k'); if(k) document.getElementById('studentTypeLabel').textContent = k==='checkout'?'簽退':'簽到';
+ if(p.get('mode')==='student'){ isStudentMode=true; const tt=document.getElementById('tabTeacher'); if(tt) tt.style.display='none'; const note=document.createElement('p'); note.textContent='學生掃碼模式：已隱藏老師端，無法切換到老師操作'; note.className='muted'; note.style.background='#fff7e6'; note.style.padding='8px'; note.style.borderRadius='8px'; document.querySelector('.wrap').prepend(note); showTab('student'); const k=p.get('k'); if(k) document.getElementById('studentTypeLabel').textContent = k==='checkout'?'簽退':'簽到';
   document.getElementById('studentSessionInfo').textContent='你正在掃碼簽到，場次：'+(p.get('s')||'')+' · 這是新的一堂課，可以用同一支手機重新簽到'; }
  const di=document.getElementById('deviceInfo'); if(di) di.textContent='你的裝置：'+getDeviceLabel(); renderList();
 })();
