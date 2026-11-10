@@ -173,14 +173,17 @@ function doCheckin(){
  // 輕量防代簽：同一裝置已幫其他學號簽過同類型，就擋下
  const params0 = new URLSearchParams(window.location.search);
  const type0 = params0.get('k')||document.getElementById('checkType').value;
- const conflict = records.find(r=>r.deviceId===deviceId && r.type===type0 && r.id!==id);
+ // 取得目前場次 ID（從 QR 連結的 s 參數來），新的一堂課會有新的 s，所以可以重新簽
+ const currentSession = params0.get('s') || 'NO_SESSION';
+ const conflict = records.find(r=>r.deviceId===deviceId && r.type===type0 && r.id!==id && (r.session===currentSession || !r.session && currentSession==='NO_SESSION'));
  if(conflict){ msg.innerHTML='<div class="error">此裝置已幫 '+conflict.name+'（'+conflict.id+'）簽到過，無法再幫其他同學簽到。<br>請用你自己的手機簽到。</div>'; return; }
  const params=new URLSearchParams(window.location.search);
  const type=params.get('k')||document.getElementById('checkType').value;
  const email=id+'@mail.chihlee.edu.tw';
  // 防重複
- if(records.find(r=>r.id===id && r.type===type)){ msg.innerHTML='<div class="error">你已經簽到過了，無需重複簽到</div>'; return; }
- const rec={id:id,name:name,email:email,type:type,time:new Date().toLocaleString(),course:'化學',room:'B44',teacher:'楊老師',deviceId:deviceId,deviceLabel:deviceLabel};
+ const curSess2 = new URLSearchParams(window.location.search).get('s') || 'NO_SESSION';
+ if(records.find(r=>r.id===id && r.type===type && (r.session===curSess2 || !r.session))){ msg.innerHTML='<div class="error">你已經簽到過了，無需重複簽到</div>'; return; }
+ const rec={id:id,name:name,email:email,type:type,time:new Date().toLocaleString(),course:'化學',room:'B44',teacher:'楊老師',deviceId:deviceId,deviceLabel:deviceLabel,session:currentSession};
  // 寫到 Google 試算表（共用資料庫）
  if(USE_GAS){
    fetch(GAS_URL, {method:'POST', mode:'no-cors', headers:{'Content-Type':'application/json'}, body: JSON.stringify(rec)}).catch(()=>{});
@@ -245,7 +248,7 @@ function emailCSV(){
 (function(){
  const p=new URLSearchParams(window.location.search);
  if(p.get('mode')==='student'){ showTab('student'); const k=p.get('k'); if(k) document.getElementById('studentTypeLabel').textContent = k==='checkout'?'簽退':'簽到';
-  document.getElementById('studentSessionInfo').textContent='你正在掃碼簽到，場次：'+(p.get('s')||'')+' · Token：'+(p.get('t')||''); }
+  document.getElementById('studentSessionInfo').textContent='你正在掃碼簽到，場次：'+(p.get('s')||'')+' · 這是新的一堂課，可以用同一支手機重新簽到'; }
  const di=document.getElementById('deviceInfo'); if(di) di.textContent='你的裝置：'+getDeviceLabel(); renderList();
 })();
 </script>
