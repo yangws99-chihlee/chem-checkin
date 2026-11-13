@@ -53,7 +53,7 @@ code{word-break:break-all;background:#f6f6f6;padding:6px 8px;border-radius:6px;d
 <button class="btn btn-outline" onclick="openStudentLink()">無法掃描？點我直接開啟學生簽到頁</button>
 </div></div>
 </div>
-<div class="card"><h2>即時名單 <span id="countLabel"></span></h2><div id="listArea"><p class="muted">尚未有簽到資料。學生簽到後會顯示在這裡（同一台裝置測試時即時顯示）。</p></div>
+<div class="card"><h2>即時名單 <span id="countLabel"></span></h2><p class="muted">全班共 61 人，10 分鐘後簽到自動標示為遲到。未到名單會自動算出來，不用一個一個對。</p><div id="listArea"><p class="muted">尚未有簽到資料。學生簽到後會顯示在這裡（同一台裝置測試時即時顯示）。</p></div>
 <button class="btn btn-primary" onclick="syncFromSheet()">🔄 從 Google 試算表同步名單</button><p class="muted">老師請每 30 秒按一次同步，或結束簽到後按一次，名單就會從試算表讀回來。</p><button class="btn btn-gray" onclick="exportCSV()">下載 CSV</button>
 <button class="btn btn-gray" onclick="copyCSV()">複製 CSV 內容</button>
 <button class="btn btn-green" onclick="emailCSV()">寄到楊老師信箱 yangws99@gm.chihlee.edu.tw</button>
@@ -72,8 +72,8 @@ code{word-break:break-all;background:#f6f6f6;padding:6px 8px;border-radius:6px;d
 <label>學號（5 開頭的 8 碼，例如 51234567）</label>
 <input id="studentId" placeholder="請輸入 5 開頭的 8 碼學號，例如 51234567" maxlength="8" inputmode="numeric">
 <p id="emailPreview" class="muted"></p>
-<label>姓名</label>
-<input id="studentName" placeholder="請輸入姓名">
+<label>姓名（輸入學號自動顯示，不用再打）</label>
+<input id="studentName" placeholder="輸入學號後自動顯示姓名" readonly style="background:#f0f0f0"><p id="nameHint" class="muted"></p>
 <div id="studentMsg"></div>
 <button class="btn btn-primary" onclick="doCheckin()">確認簽到 / 簽退</button>
 <div id="studentSuccess" class="hidden"></div>
@@ -87,7 +87,11 @@ code{word-break:break-all;background:#f6f6f6;padding:6px 8px;border-radius:6px;d
 // 步驟：把你的 Apps Script 佈署網址貼在下面，取代 PASTE_YOUR_GAS_URL_HERE
 // 例如：https://script.google.com/macros/s/XXXX/exec
 const GAS_URL = "https://script.google.com/macros/s/AKfycbzt0r8kGsAA6vyHHe15XQy2QlBfivhPBFZ7dnlNRQT_OiPFa6qCf2set3qblp53R5mdKQ/exec";
-const TEACHER_PIN = "8888"; // 老師端密碼，預設 8888，請老師自行改成自己記得住的 4 碼
+const TEACHER_PIN = "8888";
+const ROSTER = {"51102101": "酈以信", "51102137": "莊函璇", "51102146": "黃靖雯", "51102162": "蔡念竺", "51111103": "林芯柔", "51111114": "盧蔚瀅", "51111116": "蕭丞妘", "51111118": "廖妍婷", "51111127": "蔣瑋柏", "51208104": "王詠誠", "51208107": "郭秦安", "51208142": "陳睿軒", "51208157": "王品淳", "51211123": "張郁琦", "51211134": "黃家竩", "51311112": "蔡欣霓", "51311117": "李承翰", "51411101": "陳乙瑩", "51411102": "潘芊君", "51411103": "陳栢薰", "51411104": "王冠琳", "51411105": "陳宜如", "51411106": "陳映彤", "51411107": "錢瑞竺", "51411108": "張芯瑜", "51411109": "羅又綺", "51411110": "黃品璇", "51411111": "王湘惠", "51411112": "周子昀", "51411113": "王奕涵", "51411114": "陳霈臻", "51411115": "溫紫軒", "51411116": "許珈瑄", "51411117": "陳畇蓁", "51411118": "趙宥閔", "51411119": "林睿瑜", "51411120": "鄒采穎", "51411121": "姚宇潔", "51411122": "林煥宸", "51411123": "吳玥儀", "51411124": "林知妍", "51411125": "游沛亞", "51411126": "黃優莉", "51411127": "徐詩婷", "51411128": "賴竽澄", "51411129": "吳若菡", "51411130": "楊予彤", "51411131": "陳翊忻", "51411133": "王秭唯", "51411134": "林芯瑩", "51411135": "陳奕勛", "51411136": "許芳睿", "51411137": "劉子綺", "51411138": "余婕昕", "51411139": "蔡沛彤", "51411140": "連珈儀", "51411141": "莊沛穎", "51411142": "張有志", "51411143": "簡亨諭", "51411144": "黃玟妤", "51411145": "白香盈"};
+const LATE_MINUTES = 10;
+const TOTAL_STUDENTS = Object.keys(ROSTER).length;
+ // 老師端密碼，預設 8888，請老師自行改成自己記得住的 4 碼
 const USE_GAS = GAS_URL && GAS_URL.startsWith("https://");
 
 let session=null, timer=null, token='', countdown=30;
@@ -116,7 +120,8 @@ function buildStudentUrl(){
  const base = getBaseUrl();
  const type = document.getElementById('checkType').value;
  const sid = session ? session.id : 'TEST';
- return base + '?mode=student&s=' + sid + '&t=' + token + '&k=' + type;
+ const st = session ? session.start.getTime() : Date.now();
+ return base + '?mode=student&s=' + sid + '&t=' + token + '&k=' + type + '&st=' + st;
 }
 function renderQR(){
  const url = buildStudentUrl();
@@ -155,6 +160,12 @@ function validId(id){ return /^5\d{7}$/.test(id); }
 document.getElementById('studentId').addEventListener('input', e=>{
  const v=e.target.value.trim();
  document.getElementById('emailPreview').textContent = v ? '學校帳號：'+v+'@mail.chihlee.edu.tw' : '';
+ const nm = ROSTER[v];
+ const nameInput=document.getElementById('studentName');
+ const hint=document.getElementById('nameHint');
+ if(v.length===8 && nm){ nameInput.value=nm; if(hint) hint.textContent='已找到：'+nm+'，不用再打名字，直接按確認簽到'; hint.style.color='#0a9d5c'; }
+ else if(v.length===8){ nameInput.value=''; if(hint) hint.textContent='查無此學號，請確認學號是否正確'; hint.style.color='#b00'; }
+ else { nameInput.value=''; if(hint) hint.textContent=''; }
 });
 function getDeviceId(){
  let d = localStorage.getItem('chem_device_id');
@@ -175,7 +186,10 @@ function doCheckin(){
  const name=document.getElementById('studentName').value.trim();
  const msg=document.getElementById('studentMsg'); msg.innerHTML='';
  if(!validId(id)){ msg.innerHTML='<div class="error">學號格式錯誤：必須是 5 開頭的 8 個數字，例如 51234567</div>'; return; }
- if(!name){ msg.innerHTML='<div class="error">請輸入姓名</div>'; return; }
+ const autoName = ROSTER[id];
+ if(!autoName){ msg.innerHTML='<div class="error">查無此學號，請確認是否為本班學生</div>'; return; }
+ const finalName = autoName;
+ document.getElementById('studentName').value = finalName;
  const deviceId = getDeviceId();
  const deviceLabel = getDeviceLabel();
  // 輕量防代簽：同一裝置已幫其他學號簽過同類型，就擋下
@@ -191,14 +205,20 @@ function doCheckin(){
  // 防重複
  const curSess2 = new URLSearchParams(window.location.search).get('s') || 'NO_SESSION';
  if(records.find(r=>r.id===id && r.type===type && (r.session===curSess2 || !r.session))){ msg.innerHTML='<div class="error">你已經簽到過了，無需重複簽到</div>'; return; }
- const rec={id:id,name:name,email:email,type:type,time:new Date().toLocaleString(),course:'化學',room:'B44',teacher:'楊老師',deviceId:deviceId,deviceLabel:deviceLabel,session:currentSession};
+ // 計算遲到：開始簽到後超過 10 分鐘才簽到，算遲到（簽退不算遲到）
+ const stParam = new URLSearchParams(window.location.search).get('st');
+ const startMs = stParam ? parseInt(stParam) : Date.now();
+ const diffMin = (Date.now() - startMs) / 60000;
+ let status = '準時';
+ if(type==='checkin' && diffMin > LATE_MINUTES) status='遲到';
+ const rec={id:id,name:finalName,email:email,type:type,time:new Date().toLocaleString(),course:'化學',room:'B44',teacher:'楊老師',deviceId:deviceId,deviceLabel:deviceLabel,session:currentSession};
  // 寫到 Google 試算表（共用資料庫）
  if(USE_GAS){
    fetch(GAS_URL, {method:'POST', mode:'no-cors', headers:{'Content-Type':'application/json'}, body: JSON.stringify(rec)}).catch(()=>{});
  }
  records.push(rec); localStorage.setItem('chem_records', JSON.stringify(records));
  const s=document.getElementById('studentSuccess'); s.classList.remove('hidden');
- s.innerHTML='<h3>✅ '+(type==='checkin'?'簽到成功':'簽退成功')+'</h3><p>'+name+'（'+id+'）<br>'+email+'<br>化學 / B44 / 楊老師<br>時間：'+rec.time+'</p><p class="muted">請將此畫面給老師看，或截圖留存。</p>';
+ s.innerHTML='<h3>✅ '+(type==='checkin'?'簽到成功':'簽退成功')+'（'+status+'）</h3><p>'+name+'（'+id+'）<br>'+email+'<br>化學 / B44 / 楊老師<br>時間：'+rec.time+'</p><p class="muted">請將此畫面給老師看，或截圖留存。</p>';
  const di=document.getElementById('deviceInfo'); if(di) di.textContent='你的裝置：'+getDeviceLabel(); renderList(); alert('簽到成功！已寫入 Google 試算表，老師端按同步即可看到。');
 }
 
@@ -228,10 +248,19 @@ function renderList(){
  const dupDevices = Object.keys(deviceCounts).filter(k=>deviceCounts[k]>1);
  let warn='';
  if(dupDevices.length){ warn='<p style="color:#b00;background:#ffecec;padding:8px;border-radius:8px">⚠️ 發現疑似代簽：有 '+dupDevices.length+' 台裝置簽了多人，請現場抽查。</p>'; }
- let h=warn+'<table><tr><th>姓名</th><th>學號</th><th>類型</th><th>時間</th><th>裝置</th></tr>';
- records.forEach(r=>{ const dup = r.deviceId && deviceCounts[r.deviceId]>1 ? ' <span style="color:#fff;background:#d00;padding:2px 6px;border-radius:10px;font-size:11px">疑似代簽</span>' : ''; h+='<tr><td>'+r.name+'</td><td>'+r.id+'</td><td>'+(r.type==='checkin'?'簽到':'簽退')+'</td><td>'+r.time+'</td><td>'+(r.deviceLabel||r.deviceId||'-')+dup+'</td></tr>'; });
- h+='</table>'; area.innerHTML=h;
- const csv = '課程,教室,老師,姓名,學號,Email,類型,時間,裝置\n' + records.map(r=>['化學','B44','楊老師',r.name,r.id,r.email,r.type==='checkin'?'簽到':'簽退',r.time,r.deviceLabel||r.deviceId||''].join(',')).join('\n');
+ let h=warn+'<table><tr><th>姓名</th><th>學號</th><th>類型</th><th>狀態</th><th>時間</th><th>裝置</th></tr>';
+ records.forEach(r=>{ const dup = r.deviceId && deviceCounts[r.deviceId]>1 ? ' <span style="color:#fff;background:#d00;padding:2px 6px;border-radius:10px;font-size:11px">疑似代簽</span>' : ''; const stBadge = r.status==='遲到' ? '<span style="color:#fff;background:#d00;padding:2px 6px;border-radius:10px;font-size:11px">遲到</span>' : '<span style="color:#0a6;background:#e8f8ef;padding:2px 6px;border-radius:10px;font-size:11px">準時</span>';
+ h+='<tr><td>'+r.name+'</td><td>'+r.id+'</td><td>'+(r.type==='checkin'?'簽到':'簽退')+'</td><td>'+stBadge+'</td><td>'+r.time+'</td><td>'+(r.deviceLabel||r.deviceId||'-')+dup+'</td></tr>'; });
+ h+='</table>'; // area 已在上方設定含未到名單
+ // 未到名單：用全班名單扣掉已簽到
+ const signedIds = new Set(records.filter(r=>r.type==='checkin').map(r=>String(r.id)));
+ const absent = Object.entries(ROSTER).filter(([id])=>!signedIds.has(String(id)));
+ let absentHtml = '<div style="background:#fff7e6;border:1px solid #f0d48a;padding:12px;border-radius:10px;margin-top:12px"><b>未到名單（'+absent.length+' / '+TOTAL_STUDENTS+' 人未到）</b><br>';
+ if(absent.length===0) absentHtml += '全部到齊！';
+ else absentHtml += absent.map(([id,name])=> id+' '+name).join('、');
+ absentHtml += '</div>';
+ area.innerHTML = h+'</table>' + absentHtml;
+ const csv = '課程,教室,老師,姓名,學號,Email,類型,狀態,時間,裝置\n' + records.map(r=>['化學','B44','楊老師',r.name,r.id,r.email,r.type==='checkin'?'簽到':'簽退',r.status||'準時',r.time,r.deviceLabel||r.deviceId||''].join(',')).join('\n');
  document.getElementById('csvPreview').textContent=csv;
 }
 function exportCSV(){
